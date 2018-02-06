@@ -5,11 +5,27 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Remove="Data\Migrations\20180201074824_UserId.cs" />
+    <Compile Remove="Data\Migrations\20180201074824_UserId.Designer.cs" />
+    <Compile Remove="Data\Migrations\20180201115721_nobase.cs" />
+    <Compile Remove="Data\Migrations\20180201115721_nobase.Designer.cs" />
+    <Compile Remove="Data\Migrations\20180204123614_halfTask.cs" />
+    <Compile Remove="Data\Migrations\20180204123614_halfTask.Designer.cs" />
+    <Compile Remove="Data\Migrations\20180205112544_taskWithoutTag.cs" />
+    <Compile Remove="Data\Migrations\20180205112544_taskWithoutTag.Designer.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Folder Include="wwwroot\" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="AutoMapper" Version="6.2.2" />
+    <PackageReference Include="AutoMapper.Extensions.Microsoft.DependencyInjection" Version="3.2.0" />
     <PackageReference Include="Microsoft.AspNetCore.All" Version="2.0.5" />
+    <PackageReference Include="Microsoft.VisualStudio.Web.CodeGeneration.Design" Version="2.0.1" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="2.0.1" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL.Design" Version="1.1.1" />
   </ItemGroup>
 
   <ItemGroup>
