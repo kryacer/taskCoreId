@@ -30,9 +30,16 @@ namespace taskCoreId.Controllers
         public async Task<IActionResult> GetAll()
         {
             ApplicationUser user =  await GetCurrentUserAsync();
-            var all = await _db.Tasks.Where(t => t.User.Id == user.Id).ToListAsync();
+            var all = await _db.Tasks.Where(t => t.User.Id == user.Id).OrderBy(d => d.DeadLine).ToListAsync();
             var tasksDtos = _mapper.Map<IList<TaskItemDto>>(all);
-            
+            return Ok(tasksDtos);
+        }
+        [HttpGet]
+        public async Task<IActionResult> Search(string query)
+        {
+            ApplicationUser user = await GetCurrentUserAsync();
+            var all = await _db.Tasks.Where(t => t.User.Id == user.Id && t.Name.ToLower().Contains(query)).OrderBy(d => d.DeadLine).ToListAsync();
+            var tasksDtos = _mapper.Map<IList<TaskItemDto>>(all);
             return Ok(tasksDtos);
         }
         // GET: api/Task/5
@@ -60,7 +67,7 @@ namespace taskCoreId.Controllers
         }
 
         // PUT: api/Task/update
-        [HttpPut("{id}")]
+        [HttpPut]
         public async Task<IActionResult> Update([FromBody]TaskItemDto task)
         {
             // map dto to entity and set id
@@ -80,13 +87,13 @@ namespace taskCoreId.Controllers
         }
 
         // DELETE: api/Task/delete
-        [HttpDelete("{id}")]
+        [HttpDelete]
         public IActionResult Delete(int id)
         {
-            var item = _db.Tasks.Find(id);
-            if (item != null)
+            var delItem = _db.Tasks.Find(id);
+            if (delItem != null)
             {
-                _db.Tasks.Remove(item);
+                _db.Tasks.Remove(delItem);
                 _db.SaveChanges();
             }
             return Ok();
