@@ -9,6 +9,7 @@ using AutoMapper;
 using taskCoreId.Data;
 using taskCoreId.Models;
 using Microsoft.EntityFrameworkCore;
+using System.Collections;
 
 namespace taskCoreId.Controllers
 {
@@ -30,7 +31,13 @@ namespace taskCoreId.Controllers
         public async Task<IActionResult> GetAll()
         {
             ApplicationUser user =  await GetCurrentUserAsync();
-            var all = await _db.Tasks.Where(t => t.User.Id == user.Id).OrderBy(d => d.DeadLine).ToListAsync();
+            var all = await _db.Tasks.Where(t => t.User.Id == user.Id)
+                .Include(t => t.TaskTags)
+                .ThenInclude(t=>t.Tag)
+                .OrderBy(d => d.DeadLine).ToListAsync();
+
+            var ww = all;
+            //_db.Tasks.Where(t => t.TaskTags)
             var tasksDtos = _mapper.Map<IList<TaskItemDto>>(all);
             return Ok(tasksDtos);
         }
@@ -57,11 +64,34 @@ namespace taskCoreId.Controllers
         public async Task<IActionResult> Add([FromBody]TaskItemDto task)
         {
             ApplicationUser user = await GetCurrentUserAsync();
-            // map dto to entity
-            var entity = _mapper.Map<TaskItem>(task);
-            entity.User = user;
-            entity.IsDone = false;
-            _db.Tasks.Add(entity);
+            TaskItem ts = new TaskItem { Name = task.Name, Description = task.Description, IsDone = false, DeadLine = task.DeadLine, User = user };
+            IList<TaskTag> taskTagList = new List<TaskTag>();
+            foreach(var s in _db.Tags)
+            {
+
+                for(int i =0; i<task.Tags.Count; i++)
+                {
+                    if(s.Name == task.Tags[i])
+                    {
+                        TaskTag tasktag = new TaskTag { Task = ts, Tag = _db.Tags.First(t => t.Name == task.Tags[i]) }; taskTagList.Add(tasktag);
+                        task.Tags.RemoveAt(i);
+                    }
+                    
+                }
+            }
+            if (task.Tags.Count != 0)
+            {
+                for (int i = 0; i < task.Tags.Count; i++)
+                {
+                    _db.Tags.Add(new Tag { Name = task.Tags[i] });
+                    await _db.SaveChangesAsync();
+                    Tag tg = new Tag { TagId = _db.Tags.First(t => t.Name == task.Tags[i]).TagId, Name = task.Tags[i] };
+                    TaskTag tasktag2 = new TaskTag { Task = ts, Tag = tg };
+                    taskTagList.Add(tasktag2);
+                }
+            }
+            ts.TaskTags = taskTagList;
+            _db.Tasks.Add(ts);
             await _db.SaveChangesAsync();
             return Ok();
         }
@@ -73,13 +103,16 @@ namespace taskCoreId.Controllers
             // map dto to entity and set id
             var item = _mapper.Map<TaskItem>(task);
             //item.Id = id;
-            var updItem = _db.Tasks.Find(task.Id);
+            var updItem = _db.Tasks.Find(task.TaskId);
             // update user properties
             updItem.Name = item.Name;
             updItem.Description = item.Description;
             //updItem.Tag = item.Tag;
             updItem.IsDone = item.IsDone;
             updItem.DeadLine = item.DeadLine;
+            //updItem.TaskTags.Select(t => t.Tag.TagId) = new Tag { TagId = 1, Name = "www" };
+            var ww = _db.Tasks.Include(t => t.TaskTags).ThenInclude(t => t.Tag);
+            
             _db.Tasks.Update(updItem);
             _db.Entry(updItem).State = EntityState.Modified;
             await _db.SaveChangesAsync();
@@ -101,7 +134,7 @@ namespace taskCoreId.Controllers
         public async Task<IActionResult> OppositeMark([FromBody]TaskItemDto task)
         {
             var item = _mapper.Map<TaskItem>(task);
-            var updItem = _db.Tasks.Find(item.Id);
+            var updItem = _db.Tasks.Find(item.TaskId);
             updItem.IsDone = item.IsDone;
             _db.Tasks.Update(updItem);
             _db.Entry(updItem).State = EntityState.Modified;

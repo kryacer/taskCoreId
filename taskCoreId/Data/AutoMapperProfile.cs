@@ -10,8 +10,9 @@ namespace taskCoreId.Data
     {
         public AutoMapperProfile()
         {
-            CreateMap<TaskItem, TaskItemDto>();
-            CreateMap<TaskItemDto, TaskItem>();
+            CreateMap<TaskItem, TaskItemDto>().ForMember(destination => destination.Tags, map => map.MapFrom(
+                source => source.TaskTags.Select(t=>t.Tag.Name)));
+           // CreateMap<TaskItemDto, TaskItem>().ForMember(destination =>destination.TaskTags.Select(t => t.Tag.Name), map=>map.MapFrom(source =>source.Tags));
         }
 
 
