@@ -35,11 +35,16 @@ namespace taskCoreId.Controllers
                 .Include(t => t.TaskTags)
                 .ThenInclude(t=>t.Tag)
                 .OrderBy(d => d.DeadLine).ToListAsync();
-
-            var ww = all;
-            //_db.Tasks.Where(t => t.TaskTags)
             var tasksDtos = _mapper.Map<IList<TaskItemDto>>(all);
             return Ok(tasksDtos);
+        }
+        [HttpGet]
+        public async Task<IActionResult> GetAllTags()
+        {
+            ApplicationUser user = await GetCurrentUserAsync();
+            var all = await _db.Tags.Include(t => t.TaskTags).ThenInclude(t=>t.Task).Select(t=>t.TaskTags.Where(d=>d.Task.User==user)).ToListAsync();
+            var tagDtos = _mapper.Map<IList<TagDto>>(all);
+            return Ok(tagDtos);
         }
         [HttpGet]
         public async Task<IActionResult> Search(string query)
@@ -58,6 +63,36 @@ namespace taskCoreId.Controllers
             var itemDto = _mapper.Map<IList<TaskItemDto>>(item);
             return Ok(itemDto);
         }
+        private IList<TaskTag> TagFilter(TaskItem ts, List<string> tags)
+        {
+            IList<TaskTag> taskTagList = new List<TaskTag>();
+            List<string> newTags = new List<string>();
+            for (int i = 0; i < tags.Count; i++)
+            {
+                var temp = _db.Tags.SingleOrDefault(t => t.Name == tags[i]);
+                if (temp != null)
+                {
+                    TaskTag tasktag = new TaskTag { Task = ts, Tag = temp };
+                    taskTagList.Add(tasktag);
+                }
+                else
+                {
+                    newTags.Add(tags[i]);
+                }
+            }
+            if (newTags.Count != 0)
+            {
+                for (int i = 0; i < newTags.Count; i++)
+                {
+                    var tag = new Tag { Name = newTags[i] };
+                    _db.Tags.Add(tag);
+
+                    TaskTag tasktag2 = new TaskTag { Task = ts, Tag = tag };
+                    taskTagList.Add(tasktag2);
+                }
+            }
+            return taskTagList;
+        }
 
         // POST: api/Task/Add
         [HttpPost]
@@ -65,32 +100,7 @@ namespace taskCoreId.Controllers
         {
             ApplicationUser user = await GetCurrentUserAsync();
             TaskItem ts = new TaskItem { Name = task.Name, Description = task.Description, IsDone = false, DeadLine = task.DeadLine, User = user };
-            IList<TaskTag> taskTagList = new List<TaskTag>();
-            foreach(var s in _db.Tags)
-            {
-
-                for(int i =0; i<task.Tags.Count; i++)
-                {
-                    if(s.Name == task.Tags[i])
-                    {
-                        TaskTag tasktag = new TaskTag { Task = ts, Tag = _db.Tags.First(t => t.Name == task.Tags[i]) }; taskTagList.Add(tasktag);
-                        task.Tags.RemoveAt(i);
-                    }
-                    
-                }
-            }
-            if (task.Tags.Count != 0)
-            {
-                for (int i = 0; i < task.Tags.Count; i++)
-                {
-                    _db.Tags.Add(new Tag { Name = task.Tags[i] });
-                    await _db.SaveChangesAsync();
-                    Tag tg = new Tag { TagId = _db.Tags.First(t => t.Name == task.Tags[i]).TagId, Name = task.Tags[i] };
-                    TaskTag tasktag2 = new TaskTag { Task = ts, Tag = tg };
-                    taskTagList.Add(tasktag2);
-                }
-            }
-            ts.TaskTags = taskTagList;
+            ts.TaskTags = TagFilter(ts, task.Tags);
             _db.Tasks.Add(ts);
             await _db.SaveChangesAsync();
             return Ok();
@@ -100,21 +110,17 @@ namespace taskCoreId.Controllers
         [HttpPut]
         public async Task<IActionResult> Update([FromBody]TaskItemDto task)
         {
-            // map dto to entity and set id
-            var item = _mapper.Map<TaskItem>(task);
-            //item.Id = id;
-            var updItem = _db.Tasks.Find(task.TaskId);
+            TaskItem updItem = _db.Tasks.Find(task.TaskId);
             // update user properties
-            updItem.Name = item.Name;
-            updItem.Description = item.Description;
-            //updItem.Tag = item.Tag;
-            updItem.IsDone = item.IsDone;
-            updItem.DeadLine = item.DeadLine;
-            //updItem.TaskTags.Select(t => t.Tag.TagId) = new Tag { TagId = 1, Name = "www" };
-            var ww = _db.Tasks.Include(t => t.TaskTags).ThenInclude(t => t.Tag);
-            
+            updItem.Name = task.Name;
+            updItem.Description = task.Description;
+            updItem.IsDone = task.IsDone;
+            updItem.DeadLine = task.DeadLine;
+            _db.TaskTag.RemoveRange(_db.TaskTag.Where(t => t.TaskId == task.TaskId));
+            _db.SaveChanges();
+            //updItem.TaskTags.Clear();
+             updItem.TaskTags = TagFilter(updItem, task.Tags);
             _db.Tasks.Update(updItem);
-            _db.Entry(updItem).State = EntityState.Modified;
             await _db.SaveChangesAsync();
             return Ok();
         }
@@ -133,11 +139,10 @@ namespace taskCoreId.Controllers
         }
         public async Task<IActionResult> OppositeMark([FromBody]TaskItemDto task)
         {
-            var item = _mapper.Map<TaskItem>(task);
-            var updItem = _db.Tasks.Find(item.TaskId);
-            updItem.IsDone = item.IsDone;
+            //var item = _mapper.Map<TaskItem>(task);
+            var updItem = _db.Tasks.Find(task.TaskId);
+            updItem.IsDone = task.IsDone;
             _db.Tasks.Update(updItem);
-            _db.Entry(updItem).State = EntityState.Modified;
             await _db.SaveChangesAsync();
             return Ok();
         }
