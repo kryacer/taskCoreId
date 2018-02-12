@@ -13,6 +13,5 @@ namespace taskCoreId.Models
         public List<string> Tags { get; set; }
         public bool IsDone { get; set; }
         public DateTime? DeadLine { get; set; }
-
     }
 }

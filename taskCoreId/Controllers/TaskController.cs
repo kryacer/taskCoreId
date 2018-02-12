@@ -10,6 +10,7 @@ using taskCoreId.Data;
 using taskCoreId.Models;
 using Microsoft.EntityFrameworkCore;
 using System.Collections;
+using Newtonsoft.Json;
 
 namespace taskCoreId.Controllers
 {
@@ -28,15 +29,34 @@ namespace taskCoreId.Controllers
             _mapper = mapper;
         }
         [HttpGet]
-        public async Task<IActionResult> GetAll()
+        public async Task<IActionResult> GetAllPaged(int page)
         {
             ApplicationUser user =  await GetCurrentUserAsync();
             var all = await _db.Tasks.Where(t => t.User.Id == user.Id)
                 .Include(t => t.TaskTags)
                 .ThenInclude(t=>t.Tag)
                 .OrderBy(d => d.DeadLine).ToListAsync();
-            var tasksDtos = _mapper.Map<IList<TaskItemDto>>(all);
-            return Ok(tasksDtos);
+            double count = all.Count;
+            int TotalPages = (int)Math.Ceiling(count / (double)8);
+            var items = all.Skip((page - 1) * 8).Take(8).ToList();
+           
+            // Object which we are going to send in header   
+            var paginationMetadata = new
+            {
+                totalCount = count,
+                pageSize = 8,
+                currentPage = page,
+                totalPages = TotalPages
+            };
+            // Setting Header  
+            Request.HttpContext.Response.Headers.Add("Page-Headers", JsonConvert.SerializeObject(paginationMetadata));
+            var tasksDtos = _mapper.Map<IList<TaskItemDto>>(items);
+            var result = new TaskItemDtoPagedModel
+            {
+                TaskItemDtos = tasksDtos,
+                PageCount = TotalPages
+            };
+            return Ok(result);
         }
         [HttpGet]
         public async Task<IActionResult> GetAllTags()
