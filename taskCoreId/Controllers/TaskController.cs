@@ -42,7 +42,7 @@ namespace taskCoreId.Controllers
         public async Task<IActionResult> GetAllTags()
         {
             ApplicationUser user = await GetCurrentUserAsync();
-            var all = await _db.Tags.Include(t => t.TaskTags).ThenInclude(t=>t.Task).Select(t=>t.TaskTags.Where(d=>d.Task.User==user)).ToListAsync();
+            var all = await _db.Tags.Include(t => t.TaskTags).ThenInclude(t => t.Task).Where(t=>t.TaskTags.Any(d=>d.Task.User==user)).ToListAsync();
             var tagDtos = _mapper.Map<IList<TagDto>>(all);
             return Ok(tagDtos);
         }
@@ -51,6 +51,16 @@ namespace taskCoreId.Controllers
         {
             ApplicationUser user = await GetCurrentUserAsync();
             var all = await _db.Tasks.Where(t => t.User.Id == user.Id && t.Name.ToLower().Contains(query)).OrderBy(d => d.DeadLine).ToListAsync();
+            var tasksDtos = _mapper.Map<IList<TaskItemDto>>(all);
+            return Ok(tasksDtos);
+        }
+        [HttpGet]
+        public async Task<IActionResult> SearchByTag(string tag)
+        {
+            ApplicationUser user = await GetCurrentUserAsync();
+            //var tag = _mapper.Map<IList<Tag>>(tagDto);
+            var all = await _db.Tasks.Where(t => t.User.Id == user.Id && t.TaskTags.Any(d=>d.Tag.Name==tag)).Include(t => t.TaskTags)
+                .ThenInclude(t => t.Tag).OrderBy(d => d.DeadLine).ToListAsync();
             var tasksDtos = _mapper.Map<IList<TaskItemDto>>(all);
             return Ok(tasksDtos);
         }
