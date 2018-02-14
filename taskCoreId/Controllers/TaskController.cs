@@ -28,6 +28,18 @@ namespace taskCoreId.Controllers
             _db = context;
             _mapper = mapper;
         }
+        private async Task<TaskItemDtoPagedModel> PagedItems(List<TaskItem> all, int page) {
+            double count = all.Count;
+            int TotalPages = (int)Math.Ceiling(count / (double)8);
+            var items = all.Skip((page - 1) * 8).Take(8).ToList();
+            var tasksDtos = _mapper.Map<IList<TaskItemDto>>(items);
+            var result = new TaskItemDtoPagedModel
+            {
+                TaskItemDtos = tasksDtos,
+                PageCount = TotalPages
+            };
+            return result;
+        }
         [HttpGet]
         public async Task<IActionResult> GetAllPaged(int page)
         {
@@ -36,27 +48,16 @@ namespace taskCoreId.Controllers
                 .Include(t => t.TaskTags)
                 .ThenInclude(t=>t.Tag)
                 .OrderBy(d => d.DeadLine).ToListAsync();
-            double count = all.Count;
-            int TotalPages = (int)Math.Ceiling(count / (double)8);
-            var items = all.Skip((page - 1) * 8).Take(8).ToList();
-           
-            // Object which we are going to send in header   
-            var paginationMetadata = new
-            {
-                totalCount = count,
-                pageSize = 8,
-                currentPage = page,
-                totalPages = TotalPages
-            };
-            // Setting Header  
-            Request.HttpContext.Response.Headers.Add("Page-Headers", JsonConvert.SerializeObject(paginationMetadata));
-            var tasksDtos = _mapper.Map<IList<TaskItemDto>>(items);
-            var result = new TaskItemDtoPagedModel
-            {
-                TaskItemDtos = tasksDtos,
-                PageCount = TotalPages
-            };
-            return Ok(result);
+
+            //var paginationMetadata = new
+            //{
+            //    totalCount = count,
+            //    pageSize = 8,
+            //    currentPage = page,
+            //    totalPages = TotalPages
+            //};
+            //Request.HttpContext.Response.Headers.Add("Page-Headers", JsonConvert.SerializeObject(paginationMetadata));
+            return Ok(await PagedItems(all, page));
         }
         [HttpGet]
         public async Task<IActionResult> GetAllTags()
@@ -67,22 +68,20 @@ namespace taskCoreId.Controllers
             return Ok(tagDtos);
         }
         [HttpGet]
-        public async Task<IActionResult> Search(string query)
+        public async Task<IActionResult> Search(string query, int page)
         {
             ApplicationUser user = await GetCurrentUserAsync();
             var all = await _db.Tasks.Where(t => t.User.Id == user.Id && t.Name.ToLower().Contains(query)).OrderBy(d => d.DeadLine).ToListAsync();
-            var tasksDtos = _mapper.Map<IList<TaskItemDto>>(all);
-            return Ok(tasksDtos);
+            return Ok(await PagedItems(all, page));
         }
         [HttpGet]
-        public async Task<IActionResult> SearchByTag(string tag)
+        public async Task<IActionResult> SearchByTag(string tag, int page)
         {
             ApplicationUser user = await GetCurrentUserAsync();
             //var tag = _mapper.Map<IList<Tag>>(tagDto);
             var all = await _db.Tasks.Where(t => t.User.Id == user.Id && t.TaskTags.Any(d=>d.Tag.Name==tag)).Include(t => t.TaskTags)
                 .ThenInclude(t => t.Tag).OrderBy(d => d.DeadLine).ToListAsync();
-            var tasksDtos = _mapper.Map<IList<TaskItemDto>>(all);
-            return Ok(tasksDtos);
+            return Ok(await PagedItems(all, page));
         }
         // GET: api/Task/5
         [HttpGet("{id}", Name = "Get")]
@@ -93,19 +92,37 @@ namespace taskCoreId.Controllers
             var itemDto = _mapper.Map<IList<TaskItemDto>>(item);
             return Ok(itemDto);
         }
-        private IList<TaskTag> TagFilter(TaskItem ts, List<string> tags)
+        private void TagFilter(TaskItem ts, List<string> tags)
         {
-            IList<TaskTag> taskTagList = new List<TaskTag>();
+            if(ts.TaskTags == null)
+            {
+                ts.TaskTags = new List<TaskTag>();
+            }
             List<string> newTags = new List<string>();
+            List<TaskTag> removeTags = new List<TaskTag>();
+            if (ts.TaskId != 0)
+            {
+                foreach(var s in ts.TaskTags)
+                {
+                    if(s.Tag.Name != tags.SingleOrDefault(t => t == s.Tag.Name))
+                    {
+                        removeTags.Add(s);
+                    }
+                }
+                foreach(var d in removeTags)
+                {
+                    ts.TaskTags.Remove(d);
+                }
+            }
             for (int i = 0; i < tags.Count; i++)
             {
                 var temp = _db.Tags.SingleOrDefault(t => t.Name == tags[i]);
-                if (temp != null)
+                if (temp != null && ts.TaskTags.SingleOrDefault(t=>t.Tag.Name ==tags[i]) ==null)
                 {
                     TaskTag tasktag = new TaskTag { Task = ts, Tag = temp };
-                    taskTagList.Add(tasktag);
+                    ts.TaskTags.Add(tasktag);
                 }
-                else
+                else if(ts.TaskTags.SingleOrDefault(t => t.Tag.Name == tags[i]) == null)
                 {
                     newTags.Add(tags[i]);
                 }
@@ -118,10 +135,9 @@ namespace taskCoreId.Controllers
                     _db.Tags.Add(tag);
 
                     TaskTag tasktag2 = new TaskTag { Task = ts, Tag = tag };
-                    taskTagList.Add(tasktag2);
+                    ts.TaskTags.Add(tasktag2);
                 }
             }
-            return taskTagList;
         }
 
         // POST: api/Task/Add
@@ -130,7 +146,7 @@ namespace taskCoreId.Controllers
         {
             ApplicationUser user = await GetCurrentUserAsync();
             TaskItem ts = new TaskItem { Name = task.Name, Description = task.Description, IsDone = false, DeadLine = task.DeadLine, User = user };
-            ts.TaskTags = TagFilter(ts, task.Tags);
+            TagFilter(ts, task.Tags);
             _db.Tasks.Add(ts);
             await _db.SaveChangesAsync();
             return Ok();
@@ -140,17 +156,15 @@ namespace taskCoreId.Controllers
         [HttpPut]
         public async Task<IActionResult> Update([FromBody]TaskItemDto task)
         {
-            TaskItem updItem = _db.Tasks.Find(task.TaskId);
+            TaskItem updItem = _db.Tasks.Include(t => t.TaskTags).ThenInclude(t => t.Tag).First(t => t.TaskId == task.TaskId);
             // update user properties
             updItem.Name = task.Name;
             updItem.Description = task.Description;
             updItem.IsDone = task.IsDone;
             updItem.DeadLine = task.DeadLine;
-            _db.TaskTag.RemoveRange(_db.TaskTag.Where(t => t.TaskId == task.TaskId));
-            _db.SaveChanges();
-            //updItem.TaskTags.Clear();
-             updItem.TaskTags = TagFilter(updItem, task.Tags);
-            _db.Tasks.Update(updItem);
+            //_db.TaskTag.RemoveRange(_db.TaskTag.Where(t => t.TaskId == task.TaskId));
+            TagFilter(updItem, task.Tags);
+            //_db.Tasks.Update(updItem);
             await _db.SaveChangesAsync();
             return Ok();
         }
